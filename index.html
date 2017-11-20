@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+
+body {
+  margin-left: auto;
+    margin-right: auto;
+    /*width: 50px;*/
+  font: 14px sans-serif;
+  text-align:center;
+}
+h1, p {
+      text-align: center;
+    }
+
+select{
+  height: 30px;
+  width: 90px;
+
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  /*shape-rendering: crispEdges;*/
+}
+
+.line {
+  fill: none;
+  /*stroke: steelblue;*/
+  stroke-width: 1.5px;
+}
+
+.dot {
+  fill: white;
+  stroke: steelblue;
+  stroke-width: 1.75px;
+}
+pre{
+  font-size: 17px
+}
+</style>
+<body>
+  <h1><font size = '6'>各评级的历史预测</font></h1>
+  <div>
+    <p><font size="4">评级: </font>
+      <input type="checkbox" id="chb_AA" onclick="chb_click()" checked>AA</input>
+      <input type="checkbox" id="chb_A" onclick="chb_click()" checked>A</input>
+	  <input type="checkbox" id="chb_B" onclick="chb_click()" checked>B</input>
+      <input type="checkbox" id="chb_C" onclick="chb_click()" checked>C</input>
+      <input type="checkbox" id="chb_D" onclick="chb_click()" checked>D</input>
+      <input type="checkbox" id="chb_E" onclick="chb_click()" checked>E</input>
+      <input type="checkbox" id="chb_HR" onclick="chb_click()" checked>HR</input>
+
+    <p id="menu"><font size = '4'>预计: </font>
+      <select>
+      <option value="Return">收益率</option>
+      <option value="Yield">有效收益率</option>
+      <option value="Loss">损失率</option>
+      </select>
+    <br>
+    <pre id = 'explain'>预计收益是估计的有效收益与估计的损失率之间的差额。</pre>
+  </div>
+
+<script src="//d3js.org/d3.v3.min.js"></script>
+<script>
+
+// global variable
+var explain_text = {'Return':'预计收益是估计的有效收益与估计的损失率之间的差额。',
+          'Yield':'有效收益率等于借款人利率（i）减去服务费率，（ii）减去收取的估计未收利息，（iii）加上估计收取的滞纳金',
+          'Loss':'预计损失是撇销的估计本金损失 '}
+var g_group;
+var x,y;
+var xAxis = d3.svg.axis();
+var yAxis = d3.svg.axis();
+var menu = d3.select('#menu select')
+      .on('change',option_change);
+
+
+var margin = {top: 25, right: 30, bottom: 40, left: 160},
+    width = 1280 - margin.left - margin.right,
+    height = 720 - margin.top - margin.bottom;
+
+var svg = d3.select("body").append("svg")
+  .attr("width", width + margin.left + margin.right)
+  .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+  .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+//call-back fxn in d3.csv
+function draw(data) {
+
+// get the data for redraw use
+  CreditLevel = data;
+
+// group by credit score
+  g_group = d3.nest()
+        .key(function(d) {
+            return d.group;})
+        .entries(data);
+	
+	var customTimeFormat = d3.time.format.multi([
+		["%B", function(d) { return d.getMonth(); }],
+		["%Y", function() { return true; }]
+	]);
+	
+	var time_extent = d3.extent(data, function(d) {
+            return d['date'];
+		});
+	x = d3.time.scale()
+          .range([0, width-120],0.01)
+          .domain(time_extent);
+	xAxis = d3.svg.axis()
+		.scale(x)
+		.tickFormat(customTimeFormat);	  
+		  
+  /*x = d3.scale.ordinal()
+    .domain(data.map(function(d){
+      return d['date'];
+    }))
+    .rangeBands([0, width-120],0.01);*/
+
+  y = d3.scale.linear()
+      .domain([0,30])
+      .range([height, 0]);
+
+  xAxis.scale(x)
+  .orient("bottom");
+
+  yAxis.scale(y)
+  .orient("left");
+
+  function draw_a_line(d)
+  {
+    // get the group to separate the data. option in {'return','loss','yield'}
+    var option = menu.property('value');
+    var line = d3.svg.line()
+        .x(function(d) { return x(d.date); })
+        .y(function(d) { return y(d[option]); })
+		.interpolate("cardinal");
+
+    y.domain([
+        d3.min(data,function(d){return d[option]}),
+        d3.max(data,function(d){return d[option]})
+      ]);
+
+    var c_line = svg.append('g').attr('class','credit').attr('id',d[0].group);
+
+    // draw the line
+    c_line.append("path")
+        .attr("class", "line")
+        .attr("d", line(d));
+    // draw the legend of the line
+    c_line.append('text')
+      .attr('class','Line_Group')
+      .datum(function(){return d;})
+      .attr('transform',function(d){return 'translate('+ x(d[d.length-1].date)+','+y(d[d.length-1][option])+')';})
+      .attr('x',4)
+      .attr('dy','.35em')
+      .text(d[0].group);
+
+  }
+
+  // draw a line one time
+  g_group.forEach(function(d){
+    draw_a_line(d.values);
+  });
+
+  svg.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + height + ")")
+    .call(xAxis);
+
+  // y axis and it's legend
+  svg.append("g")
+    .attr("class", "y axis")
+    .call(yAxis)
+    .append('text')
+    .text('Rate (%)')
+    .attr('class','label')
+    .attr('dy','-2em')
+    .attr('y',50)
+    .attr('x',20)
+    .style('font-size','16px');
+
+  // set the color of the lines
+  var rgb = ['#B22222','#CD5555','#B8860B','#FFD700','#9AFF9A','#00CD66','#008B00'];
+  var lineName = ['HR','E','D','C','B','A','AA'];
+  lineName.forEach(function(d,i){
+    d3.select('g#'+d).select('.line').style('stroke',rgb[i]);
+    i+=1;
+  })
+
+};
+
+function redraw_line(data){
+
+  var option = menu.property('value');
+  var line = d3.svg.line()
+    .x(function(d) { return x(d.date); })
+    .y(function(d) { return y(d[option]); })
+    .interpolate("cardinal");
+
+  y.domain([
+      -2+d3.min(CreditLevel,function(d){return d[option]}),
+      2+d3.max(CreditLevel,function(d){return d[option]})
+    ]);
+  var id = 'g#'+data[0].group;
+
+  // change the lines
+  var c_line = d3.selectAll(id).select('.line').transition().duration(1000).ease("bounce");
+  c_line.attr("d", line(data));
+
+  // draw the legend of the line
+  d3.selectAll(id).select('text').remove();
+   var c_text = d3.selectAll(id).append('text');
+      c_text.attr('class','Line_Group')
+      .datum(function(){return data;})
+      .attr('transform',function(d){return 'translate('+ x(d[d.length-1].date)+','+y(d[d.length-1][option])+')';})
+      .attr('x',4)
+      .attr('dy','.35em')
+      .text(data[0].group);
+
+  // just the y axis need to redraw
+  d3.select('.y.axis').transition().duration(1000).ease('bounce')
+    .call(yAxis);
+}
+
+//option in {'return','loss','yield'}
+function option_change()
+{
+  // change the explain text of the option
+  var option = menu.property('value');
+  d3.select('pre#explain').text(explain_text[option]);
+
+  // g_group is the data group by credit score
+  g_group.forEach(function(d){
+    redraw_line(d.values);
+  })
+
+}
+
+//checkbox for credit score : AA A B ...HR
+function chb_click()
+{
+  var c = ['chb_AA','chb_A','chb_B','chb_C','chb_D','chb_E','chb_HR'];
+  var true_tab = new Array(c.length);
+  c.forEach(function(d,i){
+    true_tab[i] = document.getElementById(d).checked;
+    d = d.replace('chb_','');
+    document.getElementById(d).style.cssText = true_tab[i]?'opacity:1':'opacity:0.1';
+    i+=1;
+  });
+}
+</script>
+
+<script type="text/javascript">
+
+format = d3.time.format("%Y-%m");
+
+d3.csv("loan_by_group.csv",function(d){
+  d['date'] = format.parse(d['date']);
+  d['Yield'] = d3.round(+d['EstimatedEffectiveYield']*100,1);
+  d['Loss'] = d3.round(+d['EstimatedLoss']*100,1);
+  d['Return'] = d3.round(+d['EstimatedReturn']*100,1);
+
+  return d;
+},draw);
+</script>
+<p><font size = '3'>数据来源：Prosper Loan Data.</font></p>
+</html>
